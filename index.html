@@ -31,6 +31,13 @@
   .num{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums;}
 
   #palco{position:fixed; inset:0; background:#000;}
+
+  /* tudo que é ampliado junto vive aqui dentro */
+  #mundo{
+    position:absolute; inset:0;
+    transform-origin:50% 50%;
+    will-change:transform;
+  }
   #camera{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; display:block;}
   #camada{
     position:absolute; left:50%; top:50%;
@@ -44,8 +51,8 @@
     transform:translate(-50%,-50%);
     position:relative;
   }
+
   #gestos{position:absolute; inset:0; touch-action:none;}
-  #gestos.travado{pointer-events:none;}
 
   #topo{position:absolute; top:calc(var(--safe-t) + 10px); left:12px; right:12px; display:flex; align-items:center; gap:10px; pointer-events:none;}
   #selo{
@@ -111,27 +118,29 @@
   button.travar{grid-column:span 2; background:rgba(255,180,84,.14); border-color:rgba(255,180,84,.45); color:var(--travado);}
   button.travar.ativo{background:var(--travado); border-color:var(--travado); color:#1a1000;}
 
-  /* ---------- gaveta de filtros ---------- */
-  #gaveta{
-    display:none;
-    margin:0 0 14px; padding-bottom:14px;
-    border-bottom:1px solid var(--linha);
-  }
+  #gaveta{display:none; margin:0 0 14px; padding-bottom:14px; border-bottom:1px solid var(--linha);}
   #gaveta.ver{display:block;}
   .chips{display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-bottom:14px;}
-  .chip{
-    min-height:0; padding:10px 4px; border-radius:12px;
-    font-size:11.5px; gap:0; flex-direction:row; justify-content:center;
-  }
+  .chip{min-height:0; padding:10px 4px; border-radius:12px; font-size:11.5px; gap:0; flex-direction:row; justify-content:center;}
   .toggles{display:grid; grid-template-columns:1fr 1fr; gap:7px;}
   .toggles button{min-height:0; padding:11px 6px; flex-direction:row; gap:7px; font-size:12px; border-radius:12px;}
   .toggles svg{width:16px; height:16px;}
-  #vazioFiltro{
-    font-size:12.5px; color:var(--apagado); line-height:1.5; margin:0 0 4px;
-  }
 
-  #destravar{
+  /* ---------- flutuantes ---------- */
+  #flutua{
     position:absolute; right:12px; bottom:calc(var(--safe-b) + 12px);
+    display:flex; align-items:center; gap:10px;
+  }
+  #zoom1{
+    display:none; min-height:0; width:auto; padding:12px 15px; gap:0;
+    flex-direction:row; border-radius:999px;
+    background:var(--vidro); border:1px solid var(--linha);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    box-shadow:0 6px 20px rgba(0,0,0,.45);
+    font-size:13px; font-weight:600;
+  }
+  #zoom1.ver{display:flex;}
+  #destravar{
     width:60px; height:60px; border-radius:50%; padding:0; gap:0;
     background:rgba(255,180,84,.92); border:none; color:#1a1000;
     box-shadow:0 8px 26px rgba(0,0,0,.55);
@@ -139,6 +148,19 @@
   }
   #destravar.ver{display:flex;}
   #destravar svg{width:24px; height:24px; stroke-width:1.9;}
+
+  #dica{
+    position:absolute; left:0; right:0; bottom:calc(var(--safe-b) + 88px);
+    text-align:center; pointer-events:none;
+    font-size:12.5px; color:var(--apagado);
+    opacity:0; transition:opacity .25s ease;
+  }
+  #dica.ver{opacity:1;}
+  #dica span{
+    background:var(--vidro); border:1px solid var(--linha);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    padding:8px 14px; border-radius:999px;
+  }
 
   #abertura{
     position:absolute; inset:0; z-index:20;
@@ -170,9 +192,11 @@
 <body>
 
 <div id="palco">
-  <video id="camera" playsinline autoplay muted></video>
 
-  <div id="camada"><canvas id="foto"></canvas></div>
+  <div id="mundo">
+    <video id="camera" playsinline autoplay muted></video>
+    <div id="camada"><canvas id="foto"></canvas></div>
+  </div>
 
   <div id="gestos"></div>
 
@@ -181,9 +205,14 @@
     <div id="leitura" class="num">100% · 0°</div>
   </div>
 
-  <button id="destravar" aria-label="Destravar imagem">
-    <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>
-  </button>
+  <div id="dica"><span id="dicaTexto"></span></div>
+
+  <div id="flutua">
+    <button id="zoom1" class="num" aria-label="Voltar o zoom para 1×">1×</button>
+    <button id="destravar" aria-label="Destravar imagem">
+      <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>
+    </button>
+  </div>
 
   <div id="painel">
 
@@ -252,9 +281,9 @@
     <h1>Decalque<br><span>direto no objeto</span></h1>
     <p>Câmera ao vivo em tela cheia, com a sua imagem por cima em transparência. Apoie o celular num suporte e desenhe olhando pela tela.</p>
     <ol>
-      <li><b>Um dedo</b> move a imagem</li>
-      <li><b>Dois dedos</b> ampliam e giram</li>
-      <li><b>Travar</b> congela a posição para desenhar</li>
+      <li><b>Destravado:</b> os dedos ajustam o desenho</li>
+      <li><b>Travado:</b> dois dedos ampliam a cena inteira</li>
+      <li><b>Um dedo travado</b> não move nada</li>
     </ol>
     <button id="ligar">Ligar câmera</button>
     <div id="erro"></div>
@@ -266,6 +295,7 @@
   "use strict";
 
   var video    = document.getElementById('camera');
+  var mundo    = document.getElementById('mundo');
   var camada   = document.getElementById('camada');
   var foto     = document.getElementById('foto');
   var ctx      = foto.getContext('2d', { willReadFrequently:true });
@@ -292,14 +322,19 @@
   var btnFundo  = document.getElementById('btnFundo');
   var btnInv    = document.getElementById('btnInverter');
   var destravar = document.getElementById('destravar');
+  var zoom1     = document.getElementById('zoom1');
+  var dica      = document.getElementById('dica');
+  var dicaTexto = document.getElementById('dicaTexto');
 
+  // desenho: posição da imagem dentro do mundo
   var st = { x:0, y:0, s:1, r:0, o:0.5, esp:1 };
-  var travado = false, temFoto = false, fluxo = null, trilha = null, lanterna = false, wake = null;
+  // lente: zoom e deslocamento do mundo inteiro (vídeo + imagem juntos)
+  var lente = { z:1, x:0, y:0 };
+  var ZMAX = 8;
 
+  var travado = false, temFoto = false, fluxo = null, trilha = null, lanterna = false, wake = null;
   var filtro = 'nenhum', fundoVazado = false, invertido = false;
-  var org = null;            // ImageData original (reduzida)
-  var cinza = null;          // Uint8ClampedArray de luminância
-  var LARG = 0, ALT = 0;
+  var org = null, cinza = null, LARG = 0, ALT = 0;
 
   var descricao = {
     nenhum:   { nome:'Original',  rotulo:'Intensidade' },
@@ -308,7 +343,7 @@
     traco:    { nome:'Traço',     rotulo:'Limiar' }
   };
 
-  /* ---------- render da posição ---------- */
+  /* ---------- render ---------- */
   function aplicar(){
     camada.style.transform =
       'translate(' + st.x.toFixed(2) + 'px,' + st.y.toFixed(2) + 'px) ' +
@@ -316,21 +351,48 @@
       'scale(' + (st.s * st.esp).toFixed(4) + ',' + st.s.toFixed(4) + ')';
     camada.style.opacity = st.o;
   }
-  function mostrarLeitura(){
-    var gr = ((st.r % 360) + 360) % 360;
-    leitura.textContent = Math.round(st.s * 100) + '% · ' + Math.round(gr) + '°';
+  function aplicarLente(){
+    mundo.style.transform =
+      'translate(' + lente.x.toFixed(2) + 'px,' + lente.y.toFixed(2) + 'px) scale(' + lente.z.toFixed(4) + ')';
+    zoom1.textContent = lente.z.toFixed(1).replace('.0', '') + '×';
+    zoom1.classList.toggle('ver', lente.z > 1.02);
+  }
+  function limitarLente(){
+    var mx = (lente.z - 1) * window.innerWidth  / 2;
+    var my = (lente.z - 1) * window.innerHeight / 2;
+    lente.x = Math.max(-mx, Math.min(mx, lente.x));
+    lente.y = Math.max(-my, Math.min(my, lente.y));
+  }
+  function mostrarLeitura(texto){
+    leitura.textContent = texto;
     leitura.classList.add('ver');
     clearTimeout(mostrarLeitura._t);
     mostrarLeitura._t = setTimeout(function(){ leitura.classList.remove('ver'); }, 1100);
   }
+  function leituraDesenho(){
+    var gr = ((st.r % 360) + 360) % 360;
+    mostrarLeitura(Math.round(st.s * 100) + '% · ' + Math.round(gr) + '°');
+  }
+  function mostrarDica(texto){
+    dicaTexto.textContent = texto;
+    dica.classList.add('ver');
+    clearTimeout(mostrarDica._t);
+    mostrarDica._t = setTimeout(function(){ dica.classList.remove('ver'); }, 2600);
+  }
   function pintar(el, val){ el.style.setProperty('--pct', val + '%'); }
+
+  // tela -> coordenadas do mundo (desfaz a lente)
+  function paraMundo(p){
+    var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    return { x: cx + (p.x - cx - lente.x) / lente.z,
+             y: cy + (p.y - cy - lente.y) / lente.z };
+  }
 
   /* ---------- processamento de imagem ---------- */
   function borrar(fonte, w, h, raio){
     if (raio < 1) return fonte.slice(0);
     var a = fonte.slice(0), b = new Uint8ClampedArray(w * h);
     for (var passo = 0; passo < 3; passo++){
-      // horizontal
       for (var y = 0; y < h; y++){
         var base = y * w, soma = 0, n = 0, i;
         for (i = 0; i <= raio && i < w; i++){ soma += a[base + i]; n++; }
@@ -341,7 +403,6 @@
           if (entra < w){ soma += a[base + entra]; n++; }
         }
       }
-      // vertical
       for (var x2 = 0; x2 < w; x2++){
         var soma2 = 0, n2 = 0, j;
         for (j = 0; j <= raio && j < h; j++){ soma2 += b[j * w + x2]; n2++; }
@@ -370,7 +431,6 @@
         out[i] = 255 - (m > 255 ? 255 : m);
       }
     }
-    // bordas em branco
     for (var x3 = 0; x3 < w; x3++){ out[x3] = 255; out[(h-1)*w + x3] = 255; }
     for (var y3 = 0; y3 < h; y3++){ out[y3*w] = 255; out[y3*w + w - 1] = 255; }
     return out;
@@ -415,15 +475,12 @@
         d[p] = 255 - d[p]; d[p+1] = 255 - d[p+1]; d[p+2] = 255 - d[p+2];
       }
     }
-
     if (fundoVazado){
       for (p = 0; p < d.length; p += 4){
         g = (d[p] * 0.299 + d[p+1] * 0.587 + d[p+2] * 0.114);
-        var alfa = invertido ? g : 255 - g;
-        d[p+3] = Math.min(d[p+3], alfa);
+        d[p+3] = Math.min(d[p+3], invertido ? g : 255 - g);
       }
     }
-
     ctx.putImageData(saida, 0, 0);
   }
 
@@ -469,7 +526,7 @@
     }
     try{
       fluxo = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
         audio: false
       });
     }catch(e){
@@ -518,11 +575,13 @@
   function resetar(){
     st.x = 0; st.y = 0; st.s = 1; st.r = 0;
     st.o = parseInt(opac.value, 10) / 100;
-    aplicar(); mostrarLeitura();
+    aplicar(); leituraDesenho();
   }
 
   /* ---------- gestos ---------- */
-  var g = null;
+  var gd = null;   // gesto do desenho (destravado)
+  var gl = null;   // gesto da lente (travado)
+
   function pontos(e){
     var a = [];
     for (var i = 0; i < e.touches.length && i < 2; i++) a.push({ x:e.touches[i].clientX, y:e.touches[i].clientY });
@@ -533,56 +592,106 @@
   function ang(p){ return Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x) * 180 / Math.PI; }
 
   function iniciar(e){
-    if (travado || !temFoto) return;
     var p = pontos(e);
-    g = { n:p.length, p0:p, st:{ x:st.x, y:st.y, s:st.s, r:st.r },
-          cx:window.innerWidth/2, cy:window.innerHeight/2 };
-    if (p.length === 2){ g.d0 = dist(p); g.a0 = ang(p); g.m0 = meio(p); }
+    gd = null; gl = null;
+
+    if (travado){
+      // travado: só dois dedos, e só a lente se move
+      if (p.length === 2){
+        gl = { d0:dist(p), m0:meio(p), z0:lente.z, x0:lente.x, y0:lente.y };
+      }
+      return;
+    }
+    if (!temFoto) return;
+
+    var pm = p.map(paraMundo);
+    gd = { n:p.length, p0:pm, st:{ x:st.x, y:st.y, s:st.s, r:st.r },
+           cx:window.innerWidth/2, cy:window.innerHeight/2 };
+    if (p.length === 2){ gd.d0 = dist(pm); gd.a0 = ang(pm); gd.m0 = meio(pm); }
   }
+
   function mover(e){
-    if (travado || !temFoto || !g) return;
-    e.preventDefault();
     var p = pontos(e);
-    if (p.length !== g.n){ iniciar(e); return; }
-    if (p.length === 1){
-      st.x = g.st.x + (p[0].x - g.p0[0].x);
-      st.y = g.st.y + (p[0].y - g.p0[0].y);
-    } else if (p.length === 2 && g.d0 > 0){
-      var k = dist(p) / g.d0;
-      var dr = ang(p) - g.a0;
+
+    if (travado){
+      if (!gl || p.length !== 2) return;
+      e.preventDefault();
+      var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      var m1 = meio(p);
+      var z = Math.max(1, Math.min(ZMAX, gl.z0 * (dist(p) / gl.d0)));
+      // mantém sob os dedos o mesmo ponto da cena
+      lente.z = z;
+      lente.x = m1.x - cx - z * (gl.m0.x - cx - gl.x0) / gl.z0;
+      lente.y = m1.y - cy - z * (gl.m0.y - cy - gl.y0) / gl.z0;
+      limitarLente();
+      aplicarLente();
+      mostrarLeitura(z.toFixed(1) + '×');
+      return;
+    }
+
+    if (!gd || !temFoto) return;
+    e.preventDefault();
+    if (p.length !== gd.n){ iniciar(e); return; }
+    var pm = p.map(paraMundo);
+
+    if (pm.length === 1){
+      st.x = gd.st.x + (pm[0].x - gd.p0[0].x);
+      st.y = gd.st.y + (pm[0].y - gd.p0[0].y);
+    } else if (pm.length === 2 && gd.d0 > 0){
+      var k = dist(pm) / gd.d0;
+      var dr = ang(pm) - gd.a0;
       if (dr > 180) dr -= 360; if (dr < -180) dr += 360;
-      var s = Math.min(20, Math.max(0.05, g.st.s * k));
-      k = s / g.st.s;
-      var vx = (g.cx + g.st.x) - g.m0.x, vy = (g.cy + g.st.y) - g.m0.y;
+      var s = Math.min(20, Math.max(0.05, gd.st.s * k));
+      k = s / gd.st.s;
+      var vx = (gd.cx + gd.st.x) - gd.m0.x, vy = (gd.cy + gd.st.y) - gd.m0.y;
       var rad = dr * Math.PI / 180;
       var nx = (vx * Math.cos(rad) - vy * Math.sin(rad)) * k;
       var ny = (vx * Math.sin(rad) + vy * Math.cos(rad)) * k;
-      var m1 = meio(p);
-      st.s = s; st.r = g.st.r + dr;
-      st.x = m1.x + nx - g.cx; st.y = m1.y + ny - g.cy;
+      var mm = meio(pm);
+      st.s = s; st.r = gd.st.r + dr;
+      st.x = mm.x + nx - gd.cx; st.y = mm.y + ny - gd.cy;
     }
-    aplicar(); mostrarLeitura();
+    aplicar(); leituraDesenho();
   }
-  function terminar(e){ if (!g) return; if (e.touches.length === 0) g = null; else iniciar(e); }
+
+  function terminar(e){
+    if (e.touches.length === 0){ gd = null; gl = null; }
+    else iniciar(e);
+  }
 
   gestos.addEventListener('touchstart', iniciar, { passive:true });
   gestos.addEventListener('touchmove',  mover,   { passive:false });
   gestos.addEventListener('touchend',   terminar,{ passive:true });
   gestos.addEventListener('touchcancel',terminar,{ passive:true });
 
+  // mouse e roda, para testar no computador
   gestos.addEventListener('mousedown', function(e){
     if (travado || !temFoto) return;
-    var x0 = e.clientX, y0 = e.clientY, sx = st.x, sy = st.y;
-    function mm(ev){ st.x = sx + (ev.clientX - x0); st.y = sy + (ev.clientY - y0); aplicar(); mostrarLeitura(); }
+    var i0 = paraMundo({ x:e.clientX, y:e.clientY }), sx = st.x, sy = st.y;
+    function mm(ev){
+      var i1 = paraMundo({ x:ev.clientX, y:ev.clientY });
+      st.x = sx + (i1.x - i0.x); st.y = sy + (i1.y - i0.y);
+      aplicar(); leituraDesenho();
+    }
     function mu(){ window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); }
     window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
   });
   gestos.addEventListener('wheel', function(e){
-    if (travado || !temFoto) return;
     e.preventDefault();
+    var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    if (travado){
+      var z0 = lente.z, x0 = lente.x, y0 = lente.y;
+      var z = Math.max(1, Math.min(ZMAX, z0 * (1 - e.deltaY * 0.0022)));
+      lente.z = z;
+      lente.x = e.clientX - cx - z * (e.clientX - cx - x0) / z0;
+      lente.y = e.clientY - cy - z * (e.clientY - cy - y0) / z0;
+      limitarLente(); aplicarLente(); mostrarLeitura(z.toFixed(1) + '×');
+      return;
+    }
+    if (!temFoto) return;
     if (e.shiftKey) st.r += e.deltaY * 0.2;
     else st.s = Math.min(20, Math.max(0.05, st.s * (1 - e.deltaY * 0.0015)));
-    aplicar(); mostrarLeitura();
+    aplicar(); leituraDesenho();
   }, { passive:false });
 
   ['gesturestart','gesturechange','gestureend'].forEach(function(t){
@@ -597,6 +706,7 @@
   document.getElementById('btnEspelhar').addEventListener('click', function(){ st.esp = -st.esp; aplicar(); });
   document.getElementById('btnResetar').addEventListener('click', function(){
     opac.value = 50; pintar(opac, 50); valorOp.textContent = '50%';
+    lente.z = 1; lente.x = 0; lente.y = 0; aplicarLente();
     resetar();
   });
 
@@ -634,23 +744,30 @@
     btnInv.classList.toggle('ativo', invertido);
     processar();
   });
-
   btnGaveta.addEventListener('click', function(){
     var abrir = !gaveta.classList.contains('ver');
     gaveta.classList.toggle('ver', abrir);
     btnGaveta.classList.toggle('ativo', abrir);
   });
 
+  zoom1.addEventListener('click', function(){
+    lente.z = 1; lente.x = 0; lente.y = 0; aplicarLente();
+  });
+
   function definirTrava(v){
     travado = v;
-    gestos.classList.toggle('travado', v);
+    gd = null; gl = null;
     btnTravar.classList.toggle('ativo', v);
     rotTravar.textContent = v ? 'Destravar imagem' : 'Travar imagem';
     ponto.classList.toggle('travado', v);
     ponto.classList.toggle('vivo', !v && !!fluxo);
     estado.textContent = v ? 'travado' : (fluxo ? 'ao vivo' : 'sem câmera');
-    if (v){ painel.classList.add('oculto'); destravar.classList.add('ver'); }
-    else  { painel.classList.remove('oculto'); destravar.classList.remove('ver'); }
+    if (v){
+      painel.classList.add('oculto'); destravar.classList.add('ver');
+      mostrarDica('Travado. Dois dedos ampliam a cena inteira.');
+    } else {
+      painel.classList.remove('oculto'); destravar.classList.remove('ver');
+    }
   }
   btnTravar.addEventListener('click', function(){ definirTrava(!travado); });
   destravar.addEventListener('click', function(){ definirTrava(false); });
@@ -669,9 +786,11 @@
     }catch(e){ estado.textContent = 'sem lanterna'; }
   });
 
+  window.addEventListener('resize', function(){ limitarLente(); aplicarLente(); });
+
   pintar(opac, 50); pintar(inten, 50);
   inten.disabled = true; inten.style.opacity = .4;
-  aplicar();
+  aplicar(); aplicarLente();
 })();
 </script>
 </body>
