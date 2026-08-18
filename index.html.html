@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07090c">
+<title>Decalque — visor de câmera</title>
+<style>
+  :root{
+    --tinta:#07090c;
+    --vidro:rgba(14,18,24,.72);
+    --linha:rgba(255,255,255,.14);
+    --texto:#e8eef4;
+    --apagado:#93a1b0;
+    --mira:#7be3c7;
+    --travado:#ffb454;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    overflow:hidden; position:fixed; overscroll-behavior:none;
+    background:var(--tinta); color:var(--texto);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none;
+  }
+  .num{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums;}
+
+  /* ---------- palco ---------- */
+  #palco{position:fixed; inset:0; background:#000;}
+  #camera{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; background:#000; display:block;
+  }
+  #camada{
+    position:absolute; left:50%; top:50%;
+    transform-origin:50% 50%;
+    will-change:transform, opacity;
+    pointer-events:none;
+    display:none;
+  }
+  #camada img{
+    display:block; max-width:86vw; max-height:70vh;
+    width:auto; height:auto;
+    transform:translate(-50%,-50%);
+    position:relative; left:0; top:0;
+    margin:0;
+  }
+  #camada.filtro img{filter:grayscale(1) contrast(2.2) brightness(1.05);}
+  #gestos{position:absolute; inset:0; touch-action:none;}
+  #gestos.travado{pointer-events:none;}
+
+  /* ---------- topo ---------- */
+  #topo{
+    position:absolute; top:calc(var(--safe-t) + 10px); left:12px; right:12px;
+    display:flex; align-items:center; gap:10px; pointer-events:none;
+  }
+  #selo{
+    pointer-events:auto;
+    display:flex; align-items:center; gap:8px;
+    padding:7px 12px; border-radius:999px;
+    background:var(--vidro); border:1px solid var(--linha);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--apagado);
+  }
+  #ponto{width:7px; height:7px; border-radius:50%; background:var(--apagado);}
+  #ponto.vivo{background:var(--mira); box-shadow:0 0 8px var(--mira);}
+  #ponto.travado{background:var(--travado); box-shadow:0 0 8px var(--travado);}
+  #leitura{
+    margin-left:auto; pointer-events:none;
+    padding:7px 12px; border-radius:999px;
+    background:var(--vidro); border:1px solid var(--linha);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    font-size:11px; color:var(--apagado); letter-spacing:.06em;
+    opacity:0; transition:opacity .18s ease;
+  }
+  #leitura.ver{opacity:1;}
+
+  /* ---------- painel ---------- */
+  #painel{
+    position:absolute; left:10px; right:10px; bottom:calc(var(--safe-b) + 10px);
+    padding:14px 14px 12px;
+    border-radius:22px;
+    background:var(--vidro); border:1px solid var(--linha);
+    -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
+    box-shadow:0 10px 40px rgba(0,0,0,.5);
+    transition:transform .22s ease, opacity .22s ease;
+  }
+  #painel.oculto{transform:translateY(140%); opacity:0; pointer-events:none;}
+
+  .rotulo{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--apagado);
+    margin-bottom:8px;
+  }
+  .rotulo b{color:var(--texto); font-weight:600; font-size:13px; letter-spacing:0;}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:34px; background:transparent; margin:0 0 12px;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:6px; border-radius:99px;
+    background:linear-gradient(90deg,var(--mira) var(--pct,50%),rgba(255,255,255,.16) var(--pct,50%));
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:30px; height:30px; margin-top:-12px; border-radius:50%;
+    background:#fff; border:3px solid var(--tinta);
+    box-shadow:0 2px 10px rgba(0,0,0,.6);
+  }
+  input[type=range]:disabled::-webkit-slider-runnable-track{
+    background:linear-gradient(90deg,var(--travado) var(--pct,50%),rgba(255,255,255,.12) var(--pct,50%));
+  }
+
+  .fila{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  button{
+    font:inherit; color:var(--texto);
+    background:rgba(255,255,255,.07);
+    border:1px solid var(--linha);
+    border-radius:14px; padding:12px 6px;
+    font-size:12px; letter-spacing:.02em;
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    cursor:pointer; min-height:56px;
+  }
+  button:active{background:rgba(255,255,255,.16);}
+  button:focus-visible{outline:2px solid var(--mira); outline-offset:2px;}
+  button svg{width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
+  button.ativo{background:var(--mira); border-color:var(--mira); color:#04120e;}
+  button.travar{grid-column:span 2; background:rgba(255,180,84,.14); border-color:rgba(255,180,84,.45); color:var(--travado);}
+  button.travar.ativo{background:var(--travado); border-color:var(--travado); color:#1a1000;}
+
+  /* ---------- botão flutuante quando travado ---------- */
+  #destravar{
+    position:absolute; right:12px; bottom:calc(var(--safe-b) + 12px);
+    width:60px; height:60px; border-radius:50%; padding:0; gap:0;
+    background:rgba(255,180,84,.92); border:none; color:#1a1000;
+    box-shadow:0 8px 26px rgba(0,0,0,.55);
+    display:none; align-items:center; justify-content:center;
+  }
+  #destravar.ver{display:flex;}
+  #destravar svg{width:24px; height:24px; stroke-width:1.9;}
+
+  /* ---------- abertura ---------- */
+  #abertura{
+    position:absolute; inset:0; z-index:20;
+    background:radial-gradient(120% 90% at 50% 0%,#101822 0%,#07090c 70%);
+    display:flex; flex-direction:column; justify-content:center;
+    padding:32px 26px calc(var(--safe-b) + 32px);
+  }
+  #abertura.some{display:none;}
+  #abertura h1{
+    font-size:34px; line-height:1.05; margin:0 0 14px; font-weight:650; letter-spacing:-.02em;
+  }
+  #abertura h1 span{color:var(--mira);}
+  #abertura p{margin:0 0 26px; color:var(--apagado); font-size:15px; line-height:1.5; max-width:34ch;}
+  #abertura ol{margin:0 0 30px; padding-left:18px; color:var(--apagado); font-size:14px; line-height:1.9;}
+  #abertura ol b{color:var(--texto); font-weight:600;}
+  #ligar{
+    background:var(--mira); color:#04120e; border:none;
+    font-size:16px; font-weight:650; padding:17px; border-radius:16px;
+    flex-direction:row; justify-content:center; min-height:0;
+  }
+  #erro{
+    margin-top:18px; padding:13px 15px; border-radius:12px;
+    background:rgba(255,90,90,.12); border:1px solid rgba(255,90,90,.35);
+    color:#ffc9c9; font-size:13.5px; line-height:1.5; display:none;
+  }
+  #erro.ver{display:block;}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+
+<div id="palco">
+  <video id="camera" playsinline autoplay muted></video>
+
+  <div id="camada"><img id="foto" alt=""></div>
+
+  <div id="gestos"></div>
+
+  <div id="topo">
+    <div id="selo"><span id="ponto"></span><span id="estado">sem câmera</span></div>
+    <div id="leitura" class="num">100% · 0°</div>
+  </div>
+
+  <button id="destravar" aria-label="Destravar imagem">
+    <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>
+  </button>
+
+  <div id="painel">
+    <div class="rotulo"><span>Opacidade</span><b id="valorOpacidade" class="num">50%</b></div>
+    <input id="opacidade" type="range" min="0" max="100" value="50" step="1" aria-label="Opacidade da imagem">
+
+    <div class="fila">
+      <button id="btnFoto">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>
+        Foto
+      </button>
+      <button id="btnFiltro">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M12 4a8 8 0 0 1 0 16"  fill="currentColor" stroke="none" opacity=".55"/></svg>
+        Contraste
+      </button>
+      <button id="btnResetar">
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg>
+        Resetar
+      </button>
+      <button id="btnEspelhar">
+        <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M9 7 4 12l5 5z"/><path d="M15 7l5 5-5 5z"/></svg>
+        Espelhar
+      </button>
+      <button id="btnTravar" class="travar">
+        <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Travar imagem
+      </button>
+      <button id="btnPainel">
+        <svg viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"/></svg>
+        Ocultar
+      </button>
+      <button id="btnLuz">
+        <svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.2h6c0-.8.4-1.6 1-2.2A6 6 0 0 0 12 3z"/></svg>
+        Lanterna
+      </button>
+    </div>
+  </div>
+
+  <input id="arquivo" type="file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+
+  <section id="abertura">
+    <h1>Decalque<br><span>direto no objeto</span></h1>
+    <p>Câmera ao vivo em tela cheia, com a sua imagem por cima em transparência. Apoie o celular num suporte e desenhe olhando pela tela.</p>
+    <ol>
+      <li><b>Um dedo</b> move a imagem</li>
+      <li><b>Dois dedos</b> ampliam e giram</li>
+      <li><b>Travar</b> congela a posição para desenhar</li>
+    </ol>
+    <button id="ligar">Ligar câmera</button>
+    <div id="erro"></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var video    = document.getElementById('camera');
+  var camada   = document.getElementById('camada');
+  var foto     = document.getElementById('foto');
+  var gestos   = document.getElementById('gestos');
+  var painel   = document.getElementById('painel');
+  var abertura = document.getElementById('abertura');
+  var erro     = document.getElementById('erro');
+  var arquivo  = document.getElementById('arquivo');
+  var opac     = document.getElementById('opacidade');
+  var valorOp  = document.getElementById('valorOpacidade');
+  var leitura  = document.getElementById('leitura');
+  var ponto    = document.getElementById('ponto');
+  var estado   = document.getElementById('estado');
+  var btnTravar = document.getElementById('btnTravar');
+  var btnPainel = document.getElementById('btnPainel');
+  var btnLuz    = document.getElementById('btnLuz');
+  var btnFiltro = document.getElementById('btnFiltro');
+  var destravar = document.getElementById('destravar');
+
+  var st = { x:0, y:0, s:1, r:0, o:0.5, esp:1 };
+  var travado = false, temFoto = false, fluxo = null, trilha = null, lanterna = false, wake = null;
+
+  /* ---------- render ---------- */
+  function aplicar(){
+    camada.style.transform =
+      'translate(' + st.x.toFixed(2) + 'px,' + st.y.toFixed(2) + 'px) ' +
+      'rotate(' + st.r.toFixed(2) + 'deg) ' +
+      'scale(' + (st.s * st.esp).toFixed(4) + ',' + st.s.toFixed(4) + ')';
+    camada.style.opacity = st.o;
+  }
+  function mostrarLeitura(){
+    var g = ((st.r % 360) + 360) % 360;
+    leitura.textContent = Math.round(st.s * 100) + '% · ' + Math.round(g) + '°';
+    leitura.classList.add('ver');
+    clearTimeout(mostrarLeitura._t);
+    mostrarLeitura._t = setTimeout(function(){ leitura.classList.remove('ver'); }, 1100);
+  }
+  function pintarSlider(){
+    opac.style.setProperty('--pct', opac.value + '%');
+    valorOp.textContent = opac.value + '%';
+  }
+
+  /* ---------- câmera ---------- */
+  function seguro(){
+    return window.isSecureContext ||
+           location.protocol === 'https:' ||
+           ['localhost','127.0.0.1'].indexOf(location.hostname) >= 0;
+  }
+
+  async function ligarCamera(){
+    erro.classList.remove('ver');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      return falhar('Este navegador não expõe a câmera para páginas. No iPhone, abra o link no Safari (não dentro de um app de mensagens).');
+    }
+    if (!seguro()){
+      return falhar('A câmera só é liberada em HTTPS ou localhost. Este endereço é ' + location.protocol + '// — publique o arquivo num endereço https:// e abra de lá.');
+    }
+    try{
+      fluxo = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    }catch(e){
+      try{
+        fluxo = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }catch(e2){
+        if (e2 && (e2.name === 'NotAllowedError' || e2.name === 'SecurityError')){
+          return falhar('Permissão negada. Em Ajustes › Safari › Câmera, escolha Perguntar ou Permitir, recarregue a página e toque em Ligar câmera.');
+        }
+        if (e2 && e2.name === 'NotFoundError'){
+          return falhar('Nenhuma câmera encontrada neste aparelho.');
+        }
+        if (e2 && e2.name === 'NotReadableError'){
+          return falhar('A câmera está ocupada por outro app. Feche os outros apps e tente de novo.');
+        }
+        return falhar('Não foi possível abrir a câmera' + (e2 && e2.name ? ' (' + e2.name + ')' : '') + '.');
+      }
+    }
+    video.srcObject = fluxo;
+    try{ await video.play(); }catch(e){ /* iOS já toca com playsinline+muted */ }
+
+    trilha = fluxo.getVideoTracks()[0];
+    abertura.classList.add('some');
+    ponto.classList.add('vivo');
+    estado.textContent = 'ao vivo';
+    manterAcesa();
+    if (!temFoto) setTimeout(function(){ arquivo.click(); }, 350);
+  }
+
+  function falhar(msg){
+    erro.textContent = msg;
+    erro.classList.add('ver');
+  }
+
+  async function manterAcesa(){
+    try{
+      if ('wakeLock' in navigator){ wake = await navigator.wakeLock.request('screen'); }
+    }catch(e){}
+  }
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && fluxo) manterAcesa();
+  });
+
+  /* ---------- foto ---------- */
+  arquivo.addEventListener('change', function(){
+    var f = arquivo.files && arquivo.files[0];
+    if (!f) return;
+    var url = URL.createObjectURL(f);
+    foto.onload = function(){
+      camada.style.display = 'block';
+      temFoto = true;
+      resetar();
+      URL.revokeObjectURL(url);
+    };
+    foto.src = url;
+    arquivo.value = '';
+  });
+
+  function resetar(){
+    st.x = 0; st.y = 0; st.s = 1; st.r = 0;
+    st.o = parseInt(opac.value, 10) / 100;
+    aplicar();
+    mostrarLeitura();
+  }
+
+  /* ---------- gestos ---------- */
+  var g = null;
+
+  function pontos(e){
+    var a = [];
+    for (var i = 0; i < e.touches.length && i < 2; i++){
+      a.push({ x: e.touches[i].clientX, y: e.touches[i].clientY });
+    }
+    return a;
+  }
+  function meio(p){ return { x:(p[0].x + p[1].x)/2, y:(p[0].y + p[1].y)/2 }; }
+  function dist(p){ return Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y); }
+  function ang(p){ return Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x) * 180 / Math.PI; }
+
+  function iniciar(e){
+    if (travado || !temFoto) return;
+    var p = pontos(e);
+    g = {
+      n: p.length,
+      p0: p,
+      st: { x:st.x, y:st.y, s:st.s, r:st.r },
+      cx: window.innerWidth / 2,
+      cy: window.innerHeight / 2
+    };
+    if (p.length === 2){
+      g.d0 = dist(p); g.a0 = ang(p); g.m0 = meio(p);
+    }
+  }
+
+  function mover(e){
+    if (travado || !temFoto || !g) return;
+    e.preventDefault();
+    var p = pontos(e);
+
+    if (p.length !== g.n){ iniciar(e); return; }
+
+    if (p.length === 1){
+      st.x = g.st.x + (p[0].x - g.p0[0].x);
+      st.y = g.st.y + (p[0].y - g.p0[0].y);
+    } else if (p.length === 2 && g.d0 > 0){
+      var k  = dist(p) / g.d0;
+      var dr = ang(p) - g.a0;
+      if (dr > 180) dr -= 360; if (dr < -180) dr += 360;
+
+      var s = Math.min(20, Math.max(0.05, g.st.s * k));
+      k = s / g.st.s;
+
+      // gira e amplia em torno do ponto entre os dois dedos
+      var vx = (g.cx + g.st.x) - g.m0.x;
+      var vy = (g.cy + g.st.y) - g.m0.y;
+      var rad = dr * Math.PI / 180;
+      var nx = (vx * Math.cos(rad) - vy * Math.sin(rad)) * k;
+      var ny = (vx * Math.sin(rad) + vy * Math.cos(rad)) * k;
+      var m1 = meio(p);
+
+      st.s = s;
+      st.r = g.st.r + dr;
+      st.x = m1.x + nx - g.cx;
+      st.y = m1.y + ny - g.cy;
+    }
+    aplicar();
+    mostrarLeitura();
+  }
+
+  function terminar(e){
+    if (!g) return;
+    if (e.touches.length === 0){ g = null; }
+    else { iniciar(e); }
+  }
+
+  gestos.addEventListener('touchstart', iniciar, { passive:true });
+  gestos.addEventListener('touchmove',  mover,   { passive:false });
+  gestos.addEventListener('touchend',   terminar,{ passive:true });
+  gestos.addEventListener('touchcancel',terminar,{ passive:true });
+
+  // mouse (para testar no computador)
+  gestos.addEventListener('mousedown', function(e){
+    if (travado || !temFoto) return;
+    var x0 = e.clientX, y0 = e.clientY, sx = st.x, sy = st.y;
+    function mm(ev){ st.x = sx + (ev.clientX - x0); st.y = sy + (ev.clientY - y0); aplicar(); mostrarLeitura(); }
+    function mu(){ window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); }
+    window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+  });
+  gestos.addEventListener('wheel', function(e){
+    if (travado || !temFoto) return;
+    e.preventDefault();
+    if (e.shiftKey) st.r += e.deltaY * 0.2;
+    else st.s = Math.min(20, Math.max(0.05, st.s * (1 - e.deltaY * 0.0015)));
+    aplicar(); mostrarLeitura();
+  }, { passive:false });
+
+  // bloqueia zoom e arrasto da própria página
+  ['gesturestart','gesturechange','gestureend'].forEach(function(t){
+    document.addEventListener(t, function(e){ e.preventDefault(); }, { passive:false });
+  });
+  document.addEventListener('touchmove', function(e){
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive:false });
+  document.addEventListener('dblclick', function(e){ e.preventDefault(); }, { passive:false });
+
+  /* ---------- controles ---------- */
+  document.getElementById('ligar').addEventListener('click', ligarCamera);
+  document.getElementById('btnFoto').addEventListener('click', function(){ arquivo.click(); });
+  document.getElementById('btnResetar').addEventListener('click', function(){
+    opac.value = 50; pintarSlider(); resetar();
+  });
+  document.getElementById('btnEspelhar').addEventListener('click', function(){
+    st.esp = -st.esp; aplicar();
+  });
+
+  opac.addEventListener('input', function(){
+    st.o = parseInt(opac.value, 10) / 100;
+    pintarSlider();
+    camada.style.opacity = st.o;
+  });
+
+  btnFiltro.addEventListener('click', function(){
+    camada.classList.toggle('filtro');
+    btnFiltro.classList.toggle('ativo', camada.classList.contains('filtro'));
+  });
+
+  function definirTrava(v){
+    travado = v;
+    gestos.classList.toggle('travado', v);
+    btnTravar.classList.toggle('ativo', v);
+    btnTravar.lastChild.textContent = v ? ' Destravar imagem' : ' Travar imagem';
+    opac.disabled = false;
+    ponto.classList.toggle('travado', v);
+    ponto.classList.toggle('vivo', !v && !!fluxo);
+    estado.textContent = v ? 'travado' : (fluxo ? 'ao vivo' : 'sem câmera');
+    if (v){ painel.classList.add('oculto'); destravar.classList.add('ver'); }
+    else  { painel.classList.remove('oculto'); destravar.classList.remove('ver'); btnPainel.classList.remove('ativo'); }
+  }
+  btnTravar.addEventListener('click', function(){ definirTrava(!travado); });
+  destravar.addEventListener('click', function(){ definirTrava(false); });
+
+  btnPainel.addEventListener('click', function(){
+    painel.classList.add('oculto');
+    destravar.classList.add('ver');
+  });
+
+  btnLuz.addEventListener('click', async function(){
+    if (!trilha) return;
+    try{
+      var cap = trilha.getCapabilities ? trilha.getCapabilities() : {};
+      if (!cap.torch){ estado.textContent = 'sem lanterna'; return; }
+      lanterna = !lanterna;
+      await trilha.applyConstraints({ advanced: [{ torch: lanterna }] });
+      btnLuz.classList.toggle('ativo', lanterna);
+    }catch(e){ estado.textContent = 'sem lanterna'; }
+  });
+
+  pintarSlider();
+  aplicar();
+})();
+</script>
+</body>
+</html>
